@@ -65,7 +65,6 @@ pub fn parse_1_arg_operator(chars: &mut Chars) -> Parsed1ArgOperator {
         }
         if !is_newline(char) && char != ' ' {
             variable_label_storage.push(char);
-            print!("{}", char);
             continue;
         } else if (is_newline(char) || char == ' ') && variable_label_storage.is_empty() {
             panic!()

@@ -11,6 +11,7 @@ mod code_gen;
 mod parsing;
 #[derive(Parser,Debug)]
 struct Args {
+    /// debug
     #[arg(short,default_value_t=false)]
     debug: bool,
     /// file to input
@@ -26,11 +27,14 @@ fn main() -> Result<(), u64> {
     }
     pretty_env_logger::init();
     let input = replace_windows_with_unix(fs::read_to_string(args.file_input).unwrap());
+    debug!("input = {:#?}",input);
     let parsed_string = parse_string(input);
+    debug!("parsed_string = {:#?}",parsed_string);
     let generated_code = generate_code(parsed_string);
     if let Err(_) = generated_code {
         return Err(2);
     }
+    debug!("generated_code = {:#?}",generated_code);
     let final_product = raw_instructions_to_string(generated_code.unwrap());
     println!("done");
     fs::write(args.file_output, final_product).unwrap();
