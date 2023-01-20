@@ -1,6 +1,8 @@
 #![allow(unused_doc_comments, dead_code)]
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
+
+use log::error;
 
 use crate::parsing::ast::AssASTTypes;
 struct Variable {
@@ -11,12 +13,30 @@ pub struct CodeGenerationError {
     pub type_of_error: CodeGenerationErrorType,
     pub instruction_num: usize,
 }
-#[derive(Debug)]
+
+impl Display for CodeGenerationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let err_message = match self.type_of_error.clone() {
+            CodeGenerationErrorType::VariableDoesntExist { name } => {
+                format!("variable {} does not exist", name.clone())
+            }
+            CodeGenerationErrorType::LabelDoesntExist { name } => {
+                format!("label {} does not exist", name.clone())
+            }
+        };
+        write!(
+            f,
+            "error at instruction {}: {}",
+            self.instruction_num, err_message
+        )
+    }
+}
+#[derive(Debug, Clone)]
 pub enum CodeGenerationErrorType {
     VariableDoesntExist { name: String },
     LabelDoesntExist { name: String },
 }
-pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
+pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Result<Vec<RawInstructions>,()> {
     let mut already_existing_variables_registers: HashMap<String, Variable> = HashMap::new();
     let mut already_existing_labels: HashMap<String, u64> = HashMap::new();
     let mut errors: Vec<CodeGenerationError> = vec![];
@@ -50,33 +70,7 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
                 let b_var = already_existing_variables_registers.get_key_value(&b.0);
                 let c_var = already_existing_variables_registers.get_key_value(&c.0);
                 let mut errored = false;
-                if a_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: a.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if b_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: b.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if c_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: c.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
+                check_for_errors_with_3_vars(a_var, &mut errors, line, a, &mut errored, b_var, b, c_var, c);
                 if errored {
                     return;
                 }
@@ -103,33 +97,7 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
                 let b_var = already_existing_variables_registers.get_key_value(&b.0);
                 let c_var = already_existing_variables_registers.get_key_value(&c.0);
                 let mut errored = false;
-                if a_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: a.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if b_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: b.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if c_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: c.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
+                check_for_errors_with_3_vars(a_var, &mut errors, line, a, &mut errored, b_var, b, c_var, c);
                 if errored {
                     return;
                 }
@@ -157,33 +125,7 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
                 let b_var = already_existing_variables_registers.get_key_value(&b.0);
                 let c_var = already_existing_variables_registers.get_key_value(&c.0);
                 let mut errored = false;
-                if a_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: a.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if b_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: b.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if c_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: c.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
+                check_for_errors_with_3_vars(a_var, &mut errors, line, a, &mut errored, b_var, b, c_var, c);
                 if errored {
                     return;
                 }
@@ -228,22 +170,43 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
             }
             // len = 1
             AssASTTypes::Jump { a } => {
-                let a = already_existing_labels.get_key_value(&a.0);
-                if a.is_none() {
-                    panic!()
+                let a_var = already_existing_labels.get_key_value(&a.0);
+                if a_var.is_none() {
+                    errors.push(CodeGenerationError {
+                        instruction_num: line,
+                        type_of_error: CodeGenerationErrorType::LabelDoesntExist {
+                            name: a.0.to_owned(),
+                        },
+                    });
+                    return;
                 }
-                let (_, a) = a.unwrap();
+                let (_, a) = a_var.unwrap();
                 raw_instructions.push(RawInstructions::JMP { a: *a })
             }
             // len = 1
             AssASTTypes::Copy { a, b } => {
-                let a = already_existing_variables_registers.get_key_value(&a.0);
-                let b = already_existing_variables_registers.get_key_value(&b.0);
-                if !(a.is_some() && b.is_some()) {
-                    panic!()
+                let a_var = already_existing_variables_registers.get_key_value(&a.0);
+                let b_var = already_existing_variables_registers.get_key_value(&b.0);
+                if !(a_var.is_some() && b_var.is_some()) {
+                    if a_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                                name: a.0.to_owned(),
+                            },
+                        });
+                    }
+                    if b_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                                name: b.0.to_owned(),
+                            },
+                        });
+                    }
                 }
-                let a = a.unwrap();
-                let b = b.unwrap();
+                let a = a_var.unwrap();
+                let b = b_var.unwrap();
 
                 raw_instructions.push(RawInstructions::COPY {
                     a: a.1.ram_index,
@@ -252,15 +215,46 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
             }
             // len = 1
             AssASTTypes::NotEqual { a, b, c } => {
-                let a = already_existing_variables_registers.get_key_value(&a.0);
-                let b = already_existing_variables_registers.get_key_value(&b.0);
-                let c = already_existing_labels.get_key_value(&c.0);
-                if !(a.is_some() && b.is_some() && c.is_some()) {
-                    panic!()
+                let a_var = already_existing_variables_registers.get_key_value(&a.0);
+                let b_var = already_existing_variables_registers.get_key_value(&b.0);
+                let c_var = already_existing_labels.get_key_value(&c.0);
+                if !(a_var.is_some() && b_var.is_some() && c_var.is_some()) {
+                    if a_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                                name: a.0.to_owned(),
+                            },
+                        });
+                    }
+                    if b_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                                name: b.0.to_owned(),
+                            },
+                        });
+                    }
+                    if c_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::LabelDoesntExist {
+                                name: c.0.to_owned(),
+                            },
+                        });
+                    }
                 }
-                let (_, a) = a.unwrap();
-                let (_, b) = b.unwrap();
-                let (_, c) = c.unwrap();
+                let (_, a) = a_var.unwrap();
+                let (_, b) = b_var.unwrap();
+                let (_, c) = c_var.unwrap();
+                raw_instructions.push(RawInstructions::COPY {
+                    a: a.ram_index,
+                    b: ((raw_instructions.len() + 2) * 4 + 1) as u64,
+                });
+                raw_instructions.push(RawInstructions::COPY {
+                    a: b.ram_index,
+                    b: ((raw_instructions.len() + 1) * 4 + 2) as u64,
+                });
                 raw_instructions.push(RawInstructions::NotEqual {
                     a: a.ram_index,
                     b: b.ram_index,
@@ -269,15 +263,46 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
             }
             // len = 1
             AssASTTypes::Equal { a, b, c } => {
-                let a = already_existing_variables_registers.get_key_value(&a.0);
-                let b = already_existing_variables_registers.get_key_value(&b.0);
-                let c = already_existing_labels.get_key_value(&c.0);
-                if !(a.is_some() && b.is_some() && c.is_some()) {
-                    panic!()
+                let a_var = already_existing_variables_registers.get_key_value(&a.0);
+                let b_var = already_existing_variables_registers.get_key_value(&b.0);
+                let c_var = already_existing_labels.get_key_value(&c.0);
+                if !(a_var.is_some() && b_var.is_some() && c_var.is_some()) {
+                    if a_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                                name: a.0.to_owned(),
+                            },
+                        });
+                    }
+                    if b_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                                name: b.0.to_owned(),
+                            },
+                        });
+                    }
+                    if c_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::LabelDoesntExist {
+                                name: c.0.to_owned(),
+                            },
+                        });
+                    }
                 }
-                let (_, a) = a.unwrap();
-                let (_, b) = b.unwrap();
-                let (_, c) = c.unwrap();
+                let (_, a) = a_var.unwrap();
+                let (_, b) = b_var.unwrap();
+                let (_, c) = c_var.unwrap();
+                raw_instructions.push(RawInstructions::COPY {
+                    a: a.ram_index,
+                    b: ((raw_instructions.len() + 2) * 4 + 1) as u64,
+                });
+                raw_instructions.push(RawInstructions::COPY {
+                    a: b.ram_index,
+                    b: ((raw_instructions.len() + 1) * 4 + 2) as u64,
+                });
                 raw_instructions.push(RawInstructions::Equal {
                     a: a.ram_index,
                     b: b.ram_index,
@@ -289,33 +314,7 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
                 let b_var = already_existing_variables_registers.get_key_value(&b.0);
                 let c_var = already_existing_variables_registers.get_key_value(&c.0);
                 let mut errored = false;
-                if a_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: a.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if b_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: b.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if c_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: c.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
+                check_for_errors_with_3_vars(a_var, &mut errors, line, a, &mut errored, b_var, b, c_var, c);
                 if errored {
                     return;
                 }
@@ -341,33 +340,7 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
                 let b_var = already_existing_variables_registers.get_key_value(&b.0);
                 let c_var = already_existing_variables_registers.get_key_value(&c.0);
                 let mut errored = false;
-                if a_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: a.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if b_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: b.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
-                if c_var.is_none() {
-                    errors.push(CodeGenerationError {
-                        instruction_num: line,
-                        type_of_error: CodeGenerationErrorType::VariableDoesntExist {
-                            name: c.0.to_owned(),
-                        },
-                    });
-                    errored = true;
-                }
+                check_for_errors_with_3_vars(a_var, &mut errors, line, a, &mut errored, b_var, b, c_var, c);
                 if errored {
                     return;
                 }
@@ -393,15 +366,46 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
                 });
             }
             AssASTTypes::JumpIfHigherThan { a, b, c } => {
-                let a = already_existing_variables_registers.get_key_value(&a.0);
-                let b = already_existing_variables_registers.get_key_value(&b.0);
-                let c = already_existing_labels.get_key_value(&c.0);
-                if !(a.is_some() && b.is_some() && c.is_some()) {
-                    panic!()
+                let a_var = already_existing_variables_registers.get_key_value(&a.0);
+                let b_var = already_existing_variables_registers.get_key_value(&b.0);
+                let c_var = already_existing_labels.get_key_value(&c.0);
+                if !(a_var.is_some() && b_var.is_some() && c_var.is_some()) {
+                    if a_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                                name: a.0.to_owned(),
+                            },
+                        });
+                    }
+                    if b_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                                name: b.0.to_owned(),
+                            },
+                        });
+                    }
+                    if c_var.is_none() {
+                        errors.push(CodeGenerationError {
+                            instruction_num: line,
+                            type_of_error: CodeGenerationErrorType::LabelDoesntExist {
+                                name: c.0.to_owned(),
+                            },
+                        });
+                    }
                 }
-                let (_, a) = a.unwrap();
-                let (_, b) = b.unwrap();
-                let (_, c) = c.unwrap();
+                let (_, a) = a_var.unwrap();
+                let (_, b) = b_var.unwrap();
+                let (_, c) = c_var.unwrap();
+                raw_instructions.push(RawInstructions::COPY {
+                    a: a.ram_index,
+                    b: ((raw_instructions.len() + 2) * 4 + 1) as u64,
+                });
+                raw_instructions.push(RawInstructions::COPY {
+                    a: b.ram_index,
+                    b: ((raw_instructions.len() + 1) * 4 + 2) as u64,
+                });
                 raw_instructions.push(RawInstructions::JHT {
                     a: a.ram_index,
                     b: b.ram_index,
@@ -410,9 +414,42 @@ pub fn generate_code(parsed_types: Vec<AssASTTypes>) -> Vec<RawInstructions> {
             }
         });
     if !errors.is_empty() {
-        panic!("{:#?}", errors);
+        for err in errors {
+            error!("{}", err);
+            return Err(());
+        }
     }
-    raw_instructions
+    Ok(raw_instructions)
+}
+
+fn check_for_errors_with_3_vars(a_var: Option<(&String, &Variable)>, errors: &mut Vec<CodeGenerationError>, line: usize, a: &crate::parsing::ast::Address, errored: &mut bool, b_var: Option<(&String, &Variable)>, b: &crate::parsing::ast::Address, c_var: Option<(&String, &Variable)>, c: &crate::parsing::ast::Address) {
+    if a_var.is_none() {
+        errors.push(CodeGenerationError {
+            instruction_num: line,
+            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                name: a.0.to_owned(),
+            },
+        });
+        *errored = true;
+    }
+    if b_var.is_none() {
+        errors.push(CodeGenerationError {
+            instruction_num: line,
+            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                name: b.0.to_owned(),
+            },
+        });
+        *errored = true;
+    }
+    if c_var.is_none() {
+        errors.push(CodeGenerationError {
+            instruction_num: line,
+            type_of_error: CodeGenerationErrorType::VariableDoesntExist {
+                name: c.0.to_owned(),
+            },
+        });
+        *errored = true;
+    }
 }
 
 fn calculate_variable_offset(instructions: &[AssASTTypes]) -> u64 {
@@ -432,11 +469,11 @@ fn calculate_variable_offset(instructions: &[AssASTTypes]) -> u64 {
             AssASTTypes::LabelDefenition(_l) => {}
             AssASTTypes::Jump { a: _ } => calc += 1,
             AssASTTypes::Copy { a: _, b: _ } => calc += 1,
-            AssASTTypes::NotEqual { a: _, b: _, c: _ } => calc += 1,
-            AssASTTypes::Equal { a: _, b: _, c: _ } => calc += 1,
+            AssASTTypes::NotEqual { a: _, b: _, c: _ } => calc += 3,
+            AssASTTypes::Equal { a: _, b: _, c: _ } => calc += 3,
             AssASTTypes::Divide { a: _, b: _, c: _ } => calc += 4,
             AssASTTypes::Yeet { a: _, b: _, c: _ } => calc += 4,
-            AssASTTypes::JumpIfHigherThan { a: _, b: _, c: _ } => calc += 4,
+            AssASTTypes::JumpIfHigherThan { a: _, b: _, c: _ } => calc += 3,
         });
     calc * 4
 }

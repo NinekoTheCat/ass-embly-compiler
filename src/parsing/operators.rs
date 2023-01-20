@@ -34,14 +34,14 @@ pub fn parse_def_operator(chars: &mut Chars) -> ParsedDEF {
 
         if !is_newline(char) && char.is_ascii_digit() {
             number_string_storage.push(char);
-        } else if is_newline(char) {
+        } else if is_newline(char) || char == ' ' {
             return ParsedDEF {
                 name: variable_label_storage,
                 value: number_string_storage.parse().unwrap(),
             };
         }
     }
-    panic!()
+    panic!("{}, {}",variable_label_storage, number_string_storage)
 }
 
 pub struct Parsed1ArgOperator {

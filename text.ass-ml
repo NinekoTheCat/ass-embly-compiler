@@ -1,0 +1,5 @@
+DEF ?a 1021
+DEF ?b 1022
+DEF ?c 0
+ADD ?a ?b ?c 
+EXIT ?c

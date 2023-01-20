@@ -24,6 +24,7 @@ pub fn parse_string(str: String) -> Vec<AssASTTypes> {
             }
             _ => {}
         }
+        print!("{:?}",char);
         string_instruction_storage.push(char);
         match string_instruction_storage.as_str() {
             "DEF" => {
